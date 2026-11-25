@@ -10,17 +10,55 @@ permissions:
 concurrency:
   group: pages
   cancel-in-progress: false
+# GitHub intermittently reports "No artifacts named github-pages were found"
+# at the deploy step (~19% of runs, Nov 2026). Retry up to 3 times with a fresh
+# upload each time (30s, 60s, 120s waits). Only a 4th consecutive failure fails
+# the run and sends an email.
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.d1.outputs.page_url || steps.d2.outputs.page_url || steps.d3.outputs.page_url || steps.d4.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/configure-pages@v6
+
       - uses: actions/upload-pages-artifact@v5
-        with:
-          path: .
-      - id: deployment
+        with: { path: ., name: github-pages }
+      - id: d1
+        continue-on-error: true
         uses: actions/deploy-pages@v5
+        with: { artifact_name: github-pages }
+
+      - if: steps.d1.outcome == 'failure'
+        run: sleep 30
+      - if: steps.d1.outcome == 'failure'
+        uses: actions/upload-pages-artifact@v5
+        with: { path: ., name: github-pages-r1 }
+      - id: d2
+        if: steps.d1.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+        with: { artifact_name: github-pages-r1 }
+
+      - if: steps.d2.outcome == 'failure'
+        run: sleep 60
+      - if: steps.d2.outcome == 'failure'
+        uses: actions/upload-pages-artifact@v5
+        with: { path: ., name: github-pages-r2 }
+      - id: d3
+        if: steps.d2.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+        with: { artifact_name: github-pages-r2 }
+
+      - if: steps.d3.outcome == 'failure'
+        run: sleep 120
+      - if: steps.d3.outcome == 'failure'
+        uses: actions/upload-pages-artifact@v5
+        with: { path: ., name: github-pages-r3 }
+      - id: d4
+        if: steps.d3.outcome == 'failure'
+        uses: actions/deploy-pages@v5
+        with: { artifact_name: github-pages-r3 }
